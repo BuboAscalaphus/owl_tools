@@ -3,8 +3,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/config.sh"
 
-PID_FILE=/tmp/acquisition.pid       # PID of the "ros2 launch" process
-PGID_FILE=/tmp/acquisition.pgid     # Process Group ID for group signaling
+PID_FILE=/tmp/acquisition.pid
+PGID_FILE=/tmp/acquisition.pgid
 LOG_FILE=/home/dev/bags/acquisition.log
 
 usage(){ cat <<USAGE
@@ -27,12 +27,15 @@ require_running_container(){
 }
 
 start_bg(){
-  # pass extra args safely via env to avoid host-side quoting issues
   local argstr="${*:-}"
   docker exec -e ARG_STR="$argstr" "$NAME" bash -lc '
-    set -e
-    source /opt/ros/humble/setup.bash
+    # Source ROS without nounset tripping
+    set -eo pipefail
+    export AMENT_TRACE_SETUP_FILES=${AMENT_TRACE_SETUP_FILES:-0}
+    source /opt/ros/humble/setup.bash || { echo "Failed to source /opt/ros/humble" >&2; exit 1; }
     [ -f ~/ws/install/setup.bash ] && source ~/ws/install/setup.bash || true
+    set -euo pipefail
+
     mkdir -p /home/dev/bags
 
     # Avoid double start
@@ -40,16 +43,63 @@ start_bg(){
       echo "already_running"; exit 0
     fi
 
-    # Start in a NEW SESSION so we can later signal the whole group (pgid)
-    # "exec" makes ros2 replace the shell; $! will be its PID
-    setsid bash -lc "exec ros2 launch owl_sense acquisition.launch.py $ARG_STR" >> "'"$LOG_FILE"'" 2>&1 &
+    # Resolve launch + YAML
+    PKG_PREFIX="$(ros2 pkg prefix owl_sense 2>/dev/null || true)"
+
+    INST_LAUNCH="${PKG_PREFIX:+$PKG_PREFIX/share/owl_sense/launch/acquisition.launch.py}"
+    SRC_LAUNCH="$HOME/ws/src/owl_sense/launch/acquisition.launch.py"
+
+    # Preferred YAML: installed ar082.params.yaml → fallback to src
+    INST_CFG="${PKG_PREFIX:+$PKG_PREFIX/share/owl_sense/config/cameras/ar082.params.yaml}"
+    SRC_CFG="$HOME/ws/src/owl_sense/config/cameras/ar082.params.yaml"
+
+    LAUNCH_FILE=""
+    CONFIG_FILE=""
+
+    [[ -n "${INST_LAUNCH:-}" && -f "$INST_LAUNCH" ]] && LAUNCH_FILE="$INST_LAUNCH"
+    [[ -z "$LAUNCH_FILE" && -f "$SRC_LAUNCH" ]] && LAUNCH_FILE="$SRC_LAUNCH"
+
+    [[ -n "${INST_CFG:-}" && -f "$INST_CFG" ]] && CONFIG_FILE="$INST_CFG"
+    [[ -z "$CONFIG_FILE" && -f "$SRC_CFG" ]] && CONFIG_FILE="$SRC_CFG"
+
+    if [[ -z "$LAUNCH_FILE" ]]; then
+      echo "❌ acquisition.launch.py not found. Checked: $INST_LAUNCH ; $SRC_LAUNCH" >&2
+      exit 1
+    fi
+    if [[ -z "$CONFIG_FILE" ]]; then
+      echo "❌ ar082.params.yaml not found. Checked: $INST_CFG ; $SRC_CFG" >&2
+      exit 1
+    fi
+
+    # Detect the correct launch argument name
+    SHOW_ARGS="$(ros2 launch "$LAUNCH_FILE" --show-args 2>/dev/null || true)"
+    # Common names used in ROS2 launch files
+    CANDIDATES=(config params param_file config_file yaml_file)
+    ARG_KEY=""
+    for k in "${CANDIDATES[@]}"; do
+      if printf "%s" "$SHOW_ARGS" | grep -q -E -- "--$k([ =]|$)"; then
+        ARG_KEY="$k"
+        break
+      fi
+    done
+    # Fallback: if nothing matched, try the legacy default "config"
+    ARG_KEY="${ARG_KEY:-config}"
+
+    {
+      echo "===== $(date -Is) ====="
+      echo "LAUNCH_FILE: $LAUNCH_FILE"
+      echo "CONFIG_FILE: $CONFIG_FILE"
+      echo "ARG_KEY    : $ARG_KEY"
+      echo "EXTRA_ARGS : $ARG_STR"
+    } >> "'"$LOG_FILE"'"
+
+    # Start in a new session; keep your PGID tracking
+    setsid bash -lc "exec ros2 launch \"$LAUNCH_FILE\" $ARG_KEY:=\"$CONFIG_FILE\" $ARG_STR" >> "'"$LOG_FILE"'" 2>&1 &
+
     pid=$!
     echo "$pid" > "'"$PID_FILE"'"
-
-    # Record the process group id (normally equals pid for a new session)
     pgid=$(ps -o pgid= -p "$pid" | tr -d " ")
     [[ -n "$pgid" ]] && echo "$pgid" > "'"$PGID_FILE"'"
-
     echo "started"
   '
 }
@@ -71,7 +121,6 @@ stop_bg(){
     send_and_wait() {
       sig="$1"; target="$2"; timeout="${3:-5}"
       kill -"${sig}" ${target} 2>/dev/null || return 1
-      # For kill -0, strip a leading '-' (group) to probe the leader PID
       probe=${target#-}
       for _ in $(seq 1 $((timeout*10))); do
         kill -0 "$probe" 2>/dev/null || return 0
@@ -86,12 +135,10 @@ stop_bg(){
       send_and_wait TERM "$target" 5 || \
       send_and_wait KILL "$target" 2 || true
     else
-      # Fallback if no pid/pgid found
       pkill -INT -f "ros2 launch .*owl_sense.*acquisition" 2>/dev/null || true
     fi
 
     rm -f "$PID_FILE" "$PGID_FILE" || true
-    # final cleanup (harmless if nothing remains)
     pkill -TERM -f "ros2 launch .*owl_sense.*acquisition" 2>/dev/null || true
   '
 }
@@ -147,5 +194,4 @@ case "${1:-}" in
   *)
     usage; exit 1;;
 esac
-
 
