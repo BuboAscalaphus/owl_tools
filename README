@@ -1,0 +1,17 @@
+PER INSTALLARE LA PRIMA VOLTA
+LOGIN CON SUDO (CAMBIA owl-dev con variabili ambiente come in 03.sh
+
+docker exec -it -u 0 owl-dev bash 
+apt-get update
+rosdep update
+rosdep install --from-paths /home/dev/ws/src --ignore-src -r -y
+
+
+PER SOURCEARE
+
+docker exec -it owl-dev bash
+source /opt/ros/$ROS_DISTRO/setup.bash
+cd ~/ws
+colcon build --symlink-install
+source /opt/ros/$ROS_DISTRO/setup.bash
+source ~/ws/install/setup.bash

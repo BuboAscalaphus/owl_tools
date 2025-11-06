@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
-source "$HERE/config.sh"
+source "$HERE/config.sh" 2>/dev/null || true
+
+# Use a name that won't clash with host env
+CONTAINER_USER="${CONTAINER_USER:-dev}"
 
 # Optional env:
 #   PRIV=1                    -> add --privileged -v /dev:/dev
@@ -26,7 +29,6 @@ for d in /dev/video* /dev/media* /dev/v4l-subdev* /dev/i2c-*; do
   [[ -e "$d" ]] && DEVICES+=( --device "$d" )
 done
 
-# ----- USB/sysfs/udev & cgroup rules (as array to avoid quote issues) -----
 # ----- USB/sysfs/udev & cgroup rules (each value must be ONE arg) -----
 USB_ARGS=(
   "--device-cgroup-rule=c 189:* rmw"
@@ -36,6 +38,7 @@ USB_ARGS=(
   "-v" "/sys/devices:/sys/devices:ro"
   "-v" "/run/udev:/run/udev:ro"
 )
+
 # ----- NV plugin mounts/env (optional) -----
 NV_ARGS=()
 if [[ "${NV:-0}" == "1" ]]; then
@@ -57,14 +60,14 @@ fi
 
 mkdir -p "$WS"
 
-# If container exists, ensure /home/dev/ws is mounted; otherwise recreate
+# If container exists, ensure /home/$CONTAINER_USER/ws is mounted; otherwise recreate
 if docker ps -a --format '{{.Names}}' | grep -qx "$NAME"; then
-  if docker inspect -f '{{range .Mounts}}{{if eq .Destination "/home/dev/ws"}}OK{{end}}{{end}}' "$NAME" | grep -q 'OK'; then
+  if docker inspect -f "{{range .Mounts}}{{if eq .Destination \"/home/${CONTAINER_USER}/ws\"}}OK{{end}}{{end}}" "$NAME" | grep -q 'OK'; then
     docker start "$NAME" >/dev/null
     echo "✅ Container '$NAME' started (workspace mount present)."
     exit 0
   else
-    echo "⚠️  Container '$NAME' exists but /home/dev/ws is NOT mounted. Recreating..."
+    echo "⚠️  Container '$NAME' exists but /home/${CONTAINER_USER}/ws is NOT mounted. Recreating..."
     docker rm -f "$NAME" >/dev/null
   fi
 fi
@@ -87,13 +90,13 @@ docker run -d --name "$NAME" \
   "${USB_ARGS[@]}" \
   "${GROUP_ARGS[@]}" \
   -e "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}" \
-  -v "$WS":/home/dev/ws \
-  -v "$HOME/.gitconfig":/home/dev/.gitconfig:ro \
-  -v "$HOME/.git-credentials":/home/dev/.git-credentials:ro \
+  -v "$WS":/home/"$CONTAINER_USER"/ws \
+  -v "$HOME/.gitconfig":/home/"$CONTAINER_USER"/.gitconfig:ro \
+  -v "$HOME/.git-credentials":/home/"$CONTAINER_USER"/.git-credentials:ro \
   -v "$HOME/.gitconfig":/root/.gitconfig:ro \
   -v "$HOME/.git-credentials":/root/.git-credentials:ro \
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-  -v "$BAGS":/home/dev/bags \
+  -v "$BAGS":/home/"$CONTAINER_USER"/bags \
   -v /etc/localtime:/etc/localtime:ro \
   -v /etc/timezone:/etc/timezone:ro \
   -e TZ="$(cat /etc/timezone)" \
@@ -103,18 +106,5 @@ docker run -d --name "$NAME" \
 
 echo "✅ Container '$NAME' created and running."
 
-# YOLO sidecar
-if ! docker ps -a --format '{{.Names}}' | grep -qx "yolo"; then
-  docker run -d --name yolo \
-    --network host \
-    --runtime nvidia --gpus all \
-    -e NVIDIA_VISIBLE_DEVICES=all \
-    -e NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    -v "$BAGS":/home/dev/bags:ro \
-    yolo-api:latest
-  echo "✅ YOLO API container 'yolo' created and running (host net)."
-else
-  docker start yolo >/dev/null
-  echo "✅ YOLO API container 'yolo' started."
-fi
+
 
