@@ -10,8 +10,8 @@ docker run -d --name yolo \
   --runtime nvidia --gpus all \
   -e NVIDIA_VISIBLE_DEVICES=all \
   -e NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-  -v "$HOME/ros2_ws/src/owl_bags:/home/dev/bags:ro" \
-  -v "$HOME/ros2_ws/src/owl_weights:/models:ro" \
+  -v "$HOME/$WS_DIR_NAME/src/owl_bags:/home/dev/bags:ro" \
+  -v "$HOME/$WS_DIR_NAME/src/owl_weights:/models:ro" \
   yolo-api:latest
   
 # Quick peek at logs in case the image prints where it’s listening
