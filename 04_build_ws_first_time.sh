@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "$0")/config.sh"
-docker exec -it -u 0 "$NAME" bash -lc '
-  cd /home/dev/ws && mkdir -p src &&
-  rosdep update &&
-  rosdep install --from-paths src --ignore-src -r -y --rosdistro humble &&
-  source /opt/ros/humble/setup.bash &&
+
+docker exec -it "$NAME" bash -lc '
+  set -eo pipefail
+
+  set +u
+  source /opt/ros/"$ROS_DISTRO"/setup.bash
+  set -u
+
+  cd /home/dev/ws
   colcon build --symlink-install
 '
+
