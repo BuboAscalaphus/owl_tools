@@ -9,3 +9,6 @@ NV=${NV:-0}
 BAGS=${BAGS:-$WS/src/owl_bags}   # host folder where bags are saved
 CONTAINER_USER=dev
 USERNAME=dev
+
+CAMERA_FILTER=ar0822
+

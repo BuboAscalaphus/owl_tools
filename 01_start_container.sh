@@ -24,10 +24,26 @@ GROUP_ARGS=()
 [[ -n "${GID_PLUGDEV}" ]] && GROUP_ARGS+=( --group-add "${GID_PLUGDEV}" )
 
 # ----- Devices (video/media/subdev/i2c) -----
+# ----- Devices: only matching Camer filter (case insensitive) -----
 DEVICES=()
-for d in /dev/video* /dev/media* /dev/v4l-subdev* /dev/i2c-*; do
-  [[ -e "$d" ]] && DEVICES+=( --device "$d" )
+for n in /sys/class/video4linux/*; do
+  [[ -e "$n/name" ]] || continue
+  if grep -qi "${CAMERA_FILTER}" "$n/name"; then
+    DEVICES+=( --device "/dev/$(basename "$n")" )
+  fi
 done
+for n in /sys/class/v4l-subdev/*; do
+  [[ -e "$n/name" ]] || continue
+  if grep -qi "${CAMERA_FILTER}" "$n/name"; then
+    DEVICES+=( --device "/dev/$(basename "$n")" )
+  fi
+done
+
+
+if [[ ${#DEVICES[@]} -eq 0 ]]; then
+  echo "⚠️  No matching cameras found. Starting container without cameras."
+fi
+
 
 # ----- USB/sysfs/udev & cgroup rules (each value must be ONE arg) -----
 USB_ARGS=(
