@@ -1,7 +1,7 @@
 # --- User config ---
-IMAGE=${IMAGE:-ros-image:latest}   # your image tag (e.g. owl:desktop or owl:desktop-itp)
+IMAGE=${IMAGE:-ros-image-vizionsdk-25-12:latest}   # your image tag (e.g. owl:desktop or owl:desktop-itp)
 NAME=${NAME:-owl-dev}             # container name
-WS=${WS:-$HOME/workspace}            # host workspace folder
+WS=${WS:-$HOME/workspace_new}            # host workspace folder
 ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0} # DDS domain
 
 # Set NV=1 if you need Jetson NV GStreamer plugins (Argus / nv*).
