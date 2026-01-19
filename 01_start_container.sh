@@ -44,11 +44,19 @@ if [[ ${#DEVICES[@]} -eq 0 ]]; then
   echo "⚠️  No matching cameras found. Starting container without cameras."
 fi
 
+# ----- I2C devices -----
+I2C_DEVICES=()
+for d in /dev/i2c-*; do
+  [[ -e "$d" ]] || continue
+  I2C_DEVICES+=( --device "$d" )
+done
+
 
 # ----- USB/sysfs/udev & cgroup rules (each value must be ONE arg) -----
 USB_ARGS=(
   "--device-cgroup-rule=c 189:* rmw"
   "--device-cgroup-rule=c 81:* rmw"
+  "--device-cgroup-rule=c 89:* rmw"
   "-v" "/dev/bus/usb:/dev/bus/usb"
   "-v" "/sys/bus/usb:/sys/bus/usb:ro"
   "-v" "/sys/devices:/sys/devices:ro"
@@ -103,6 +111,7 @@ docker run -d --name "$NAME" \
   --runtime nvidia --gpus all \
   "${PRIV_ARGS[@]}" \
   "${DEVICES[@]}" \
+  "${I2C_DEVICES[@]}" \
   "${USB_ARGS[@]}" \
   "${GROUP_ARGS[@]}" \
   -e "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}" \

@@ -11,5 +11,6 @@ docker exec -it "$NAME" bash -lc '
 
   cd /home/dev/ws
   colcon build --symlink-install
+  
 '
 
