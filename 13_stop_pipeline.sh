@@ -10,8 +10,11 @@ echo "⏹ Stopping pipeline (scripts + safety kill)…"
 [[ -x ./10_file_state_publisher.sh ]] && ./10_file_state_publisher.sh stop || true
 [[ -x ./11_multi_image_saver.sh    ]] && ./11_multi_image_saver.sh stop    || true
 [[ -x ./06_launch_acquisition.sh   ]] && ./06_launch_acquisition.sh stop   || true
+[[ -x ./14_launch_imu.sh   ]] && ./14_launch_imu.sh stop   || true
+[[ -x ./15_launch_rtk.sh   ]] && ./15_launch_rtk.sh stop   || true
+[[ -x ./16_imu_state_publisher.sh   ]] && ./16_imu_state_publisher stop   || true
+
 # If you sometimes record bags, stop that too (safe if the script isn't there)
-[[ -x ./09_record_bag.sh           ]] && ./09_record_bag.sh stop           || true
 
 # 2) If container isn't running, we're done
 if ! docker ps --format '{{.Names}}' | grep -qx "$NAME"; then

@@ -105,6 +105,12 @@ if [[ "$PRIV" == "1" ]]; then
   PRIV_ARGS+=( --privileged -v /dev:/dev )
 fi
 
+#Mount git solo se esistono, per me questi si possono togliere
+GIT_MOUNTS=()
+[[ -f "$HOME/.gitconfig" ]]       && GIT_MOUNTS+=( -v "$HOME/.gitconfig":/home/"$CONTAINER_USER"/.gitconfig:ro -v "$HOME/.gitconfig":/root/.gitconfig:ro )
+[[ -f "$HOME/.git-credentials" ]] && GIT_MOUNTS+=( -v "$HOME/.git-credentials":/home/"$CONTAINER_USER"/.git-credentials:ro -v "$HOME/.git-credentials":/root/.git-credentials:ro )
+
+
 # Run persistent container
 docker run -d --name "$NAME" \
   --network host --ipc=host --shm-size=1g \
@@ -116,10 +122,6 @@ docker run -d --name "$NAME" \
   "${GROUP_ARGS[@]}" \
   -e "ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}" \
   -v "$WS":/home/"$CONTAINER_USER"/ws \
-  -v "$HOME/.gitconfig":/home/"$CONTAINER_USER"/.gitconfig:ro \
-  -v "$HOME/.git-credentials":/home/"$CONTAINER_USER"/.git-credentials:ro \
-  -v "$HOME/.gitconfig":/root/.gitconfig:ro \
-  -v "$HOME/.git-credentials":/root/.git-credentials:ro \
   -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
   -v "$BAGS":/home/"$CONTAINER_USER"/bags \
   -v /etc/localtime:/etc/localtime:ro \
