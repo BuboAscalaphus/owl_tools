@@ -134,4 +134,3 @@ docker run -d --name "$NAME" \
 echo "✅ Container '$NAME' created and running."
 
 
-
